@@ -40,7 +40,8 @@ class Server:
         """
         Receives a message from the client.
         """
-
+        print("ahahaha")
+        # print(f"{self.remote_target}")
         response = self.remote_target.recv(1024).decode()
         print(response)
         self.remote_target.send(self.ACK.encode())  # Send an ACK back to the client

