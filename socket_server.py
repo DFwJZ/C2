@@ -40,7 +40,7 @@ class Server:
         """
         Receives a message from the client.
         """
-        print("ahahaha")
+        
         # print(f"{self.remote_target}")
         response = self.remote_target.recv(1024).decode()
         print(response)
@@ -64,7 +64,7 @@ class Server:
                 if not self.receive_message():
                     break
         except KeyboardInterrupt:
-            print("User interrupt.")
+            print("\n[+] Keyboard interrupt.")
         except Exception as e:
             print(f"An error occurred: {e}")
         finally:
